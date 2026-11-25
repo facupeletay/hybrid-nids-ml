@@ -65,6 +65,13 @@ RANDOM_SEED = 42
 # Presupuestos de FPR: 0.1 %, 0.5 % y 1 %. El primero es el objetivo operativo.
 TARGET_FPR_BUDGETS = (0.001, 0.005, 0.01)
 
+# Etiquetas que se destacan en los reportes: ausentes de Train o con recall nulo
+# en la capa supervisada. Solo afectan la presentación.
+FOCUS_ATTACKS = {
+    "cicids2017": ("Heartbleed", "Infiltration", "Web Attack - Sql Injection", "Bot"),
+    "unsw_nb15": (),
+}
+
 # --------------------------------------------------------------------------
 # Esquema común (salida de cada adaptador de dataset)
 # --------------------------------------------------------------------------
@@ -192,6 +199,20 @@ def get_baseline_model_path(
 def get_baseline_report_path(dataset: str = DEFAULT_DATASET, tag: str = "") -> Path:
     """Ruta del reporte de la capa supervisada."""
     return METRICS_DIR / f"xgb_baseline_{validate_dataset(dataset)}{tag}.json"
+
+
+def get_autoencoder_checkpoint_path(
+    dataset: str = DEFAULT_DATASET, suffix: str = ""
+) -> Path:
+    """Ruta del checkpoint autocontenido del Autoencoder."""
+    return MODELS_DIR / f"autoencoder_{validate_dataset(dataset)}{suffix}.pt"
+
+
+def get_autoencoder_report_path(
+    dataset: str = DEFAULT_DATASET, suffix: str = ""
+) -> Path:
+    """Ruta del reporte del Autoencoder."""
+    return METRICS_DIR / f"autoencoder_{validate_dataset(dataset)}{suffix}.json"
 
 
 def ensure_directories() -> None:

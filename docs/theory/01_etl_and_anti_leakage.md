@@ -159,9 +159,9 @@ En PortScan y SSH-Patator, parte del recall será reconocimiento exacto. No es u
 | Modelo | Entrada |
 |---|---|
 | XGBoost / LightGBM | Parquet sin escalar: son invariantes a transformaciones monótonas |
-| Autoencoder | `StandardScaler` ajustado solo con `BENIGN` de Train |
+| Autoencoder | `signed_log1p`, `StandardScaler` propio y recorte, ajustados solo con `BENIGN` de Train |
 
-Se descartó `RobustScaler`: 18 features tienen rango intercuartílico 0 en el tráfico benigno y quedarían sin escalar, con valores de hasta $1.2 \times 10^8$ (`Idle Max`). `StandardScaler` garantiza varianza unitaria, pero las colas son pesadas ($|z|$ llega a 176 en Val): el Autoencoder debería aplicar además recorte o `log1p`.
+Se descartó `RobustScaler`: 18 features tienen rango intercuartílico 0 en el tráfico benigno y quedarían sin escalar, con valores de hasta $1.2 \times 10^8$ (`Idle Max`). `StandardScaler` garantiza varianza unitaria, pero las colas son pesadas ($|z|$ llega a 176 en Val): por eso el [Autoencoder](03_autoencoder_zero_day.md#2-preprocesamiento) comprime antes de escalar y ajusta su propio scaler. El del ETL queda como referencia en escala física.
 
 ## 9. Persistencia
 

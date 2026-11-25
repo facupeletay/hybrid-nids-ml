@@ -17,7 +17,6 @@ import argparse
 import json
 import logging
 import math
-import re
 import shutil
 import subprocess
 import time
@@ -33,27 +32,34 @@ import pandas as pd
 import xgboost as xgb
 from scipy.special import expit
 
+from src.common import (
+    NO_PORT_SUFFIX,
+    calibrate_thresholds,
+    in_dir,
+    normalize_tag,
+    positive_float,
+    positive_int,
+    select_features,
+    to_strict_json,
+    write_report,
+)
 from src.config import (
     ATTACK_FAMILY_COLUMN,
     ATTACK_LABEL_COLUMN,
     BENIGN_LABEL,
     DEFAULT_DATASET,
-    DESTINATION_PORT_COLUMNS,
     RANDOM_SEED,
     SPLITS,
     SUPPORTED_DATASETS,
     TARGET_COLUMN,
-    TARGET_FPR_BUDGETS,
     ensure_directories,
     get_baseline_model_path,
     get_baseline_report_path,
-    get_feature_columns,
 )
 from src.etl import ArtifactError, atomic_write, load_artifacts, sha256_file
 from src.metrics import (
     compute_binary_soc_metrics,
     compute_per_attack_recall,
-    find_threshold_for_fpr,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,7 +77,6 @@ TOP_FEATURES = 20
 MAX_LGBM_LEAVES = 255
 
 LGBM_SUFFIX = "_lgbm"
-NO_PORT_SUFFIX = "_no_dst_port"
 
 
 @dataclass(frozen=True)
@@ -170,24 +175,6 @@ def resolve_device(device: str, model: str) -> str:
     if device == "cuda" and not available:
         raise ValueError("Se pidió cuda, pero no hay una GPU CUDA utilizable")
     return "cuda" if available else "cpu"
-
-
-def select_features(
-    columns: Iterable[str], drop_dst_port: bool = False
-) -> tuple[list[str], list[str]]:
-    """Features del modelo y columnas quitadas por la ablación.
-
-    Raises:
-        ValueError: Si se pide quitar el puerto destino y no está: una ablación
-            que no quita nada informaría un impacto nulo falso.
-    """
-    features = get_feature_columns(columns)
-    if not drop_dst_port:
-        return features, []
-    dropped = [c for c in features if c in DESTINATION_PORT_COLUMNS]
-    if not dropped:
-        raise ValueError("No hay columna de puerto destino para quitar")
-    return [c for c in features if c not in dropped], dropped
 
 
 # --------------------------------------------------------------------------
@@ -369,17 +356,6 @@ def summarize_twins(labels: pd.Series, twins: np.ndarray) -> dict[str, dict[str,
 # --------------------------------------------------------------------------
 # Calibración y evaluación
 # --------------------------------------------------------------------------
-def calibrate_thresholds(
-    y_val: np.ndarray,
-    score_val: np.ndarray,
-    budgets: Iterable[float] = TARGET_FPR_BUDGETS,
-) -> dict[float, float]:
-    """Umbral por presupuesto de FPR. Por construcción no recibe Test."""
-    return {
-        budget: find_threshold_for_fpr(y_val, score_val, budget) for budget in budgets
-    }
-
-
 def _mean(values: Iterable[float]) -> float:
     values = list(values)
     return float(np.mean(values)) if values else math.nan
@@ -608,31 +584,10 @@ def compare_ablation(
 # --------------------------------------------------------------------------
 # Persistencia
 # --------------------------------------------------------------------------
-def to_strict_json(value: Any) -> Any:
-    """Convierte a tipos JSON; lo no finito (métrica indefinida) pasa a `null`."""
-    if isinstance(value, Mapping):
-        return {str(key): to_strict_json(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [to_strict_json(item) for item in value]
-    if isinstance(value, np.generic):
-        value = value.item()
-    if isinstance(value, float) and not math.isfinite(value):
-        return None
-    return value
-
-
 def build_suffix(tag: str = "", model: str = "xgb", drop_dst_port: bool = False) -> str:
     """Sufijo de los artefactos. Cada variante tiene el suyo y no pisa a las demás."""
-    if not re.fullmatch(r"[A-Za-z0-9_.-]*", tag):
-        raise ValueError(f"tag inválido: {tag!r} (letras, dígitos, '_', '-' y '.')")
-    if tag and not tag.startswith("_"):
-        tag = f"_{tag}"
     variant = LGBM_SUFFIX if model == "lgbm" else ""
-    return tag + variant + (NO_PORT_SUFFIX if drop_dst_port else "")
-
-
-def _in_dir(path: Path, directory: Path | None) -> Path:
-    return directory / path.name if directory else path
+    return normalize_tag(tag) + variant + (NO_PORT_SUFFIX if drop_dst_port else "")
 
 
 def save_model(model: SupervisedModel, path: Path) -> Path:
@@ -673,25 +628,17 @@ def load_baseline(
     Raises:
         ArtifactError: Si falta un archivo o el modelo no es el del reporte.
     """
-    report_path = _in_dir(get_baseline_report_path(dataset, suffix), metrics_dir)
+    report_path = in_dir(get_baseline_report_path(dataset, suffix), metrics_dir)
     if not report_path.is_file():
         raise ArtifactError(f"No existe {report_path}")
     report = json.loads(report_path.read_text(encoding="utf-8"))
     extension = MODEL_EXTENSIONS[report["params"]["model"]]
-    path = _in_dir(get_baseline_model_path(dataset, suffix, extension), models_dir)
+    path = in_dir(get_baseline_model_path(dataset, suffix, extension), models_dir)
     if not path.is_file():
         raise ArtifactError(f"Falta {path}")
     if sha256_file(path) != report["model_artifact"]["sha256"]:
         raise ArtifactError(f"{path.name} no coincide con el reporte")
     return load_model(path, report["features"]), report
-
-
-def _write_report(path: Path, report: Mapping[str, Any]) -> None:
-    text = json.dumps(
-        to_strict_json(report), indent=2, ensure_ascii=False, allow_nan=False
-    )
-    atomic_write(path, lambda tmp: tmp.write_text(text, encoding="utf-8"))
-    logger.info("Reporte -> %s", path)
 
 
 # --------------------------------------------------------------------------
@@ -731,7 +678,7 @@ def run(
         extension = MODEL_EXTENSIONS[params.model]
         model_path = save_model(
             model,
-            _in_dir(get_baseline_model_path(dataset, suffix, extension), models_dir),
+            in_dir(get_baseline_model_path(dataset, suffix, extension), models_dir),
         )
         report = {
             "schema_version": REPORT_SCHEMA_VERSION,
@@ -757,15 +704,15 @@ def run(
             },
             **results,
         }
-        path = _in_dir(get_baseline_report_path(dataset, suffix), metrics_dir)
-        _write_report(path, report)
+        path = in_dir(get_baseline_report_path(dataset, suffix), metrics_dir)
+        write_report(path, report)
         return report, path
 
     report, path = execute(drop_dst_port)
     if run_ablation:
         without_port, _ = execute(True)
         report["ablation_dst_port"] = compare_ablation(report, without_port)
-        _write_report(path, report)
+        write_report(path, report)
     return to_strict_json(report)
 
 
@@ -824,19 +771,6 @@ def format_report(report: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _positive_int(text: str) -> int:
-    if (value := int(text)) < 1:
-        raise argparse.ArgumentTypeError("debe ser un entero >= 1")
-    return value
-
-
-def _positive_float(text: str) -> float:
-    value = float(text)
-    if not (math.isfinite(value) and value > 0):
-        raise argparse.ArgumentTypeError("debe ser un número > 0")
-    return value
-
-
 def _balance(text: str) -> str | float:
     try:
         return parse_balance(text)
@@ -852,11 +786,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--model", choices=MODELS, default=defaults.model)
     parser.add_argument(
-        "--n-estimators", type=_positive_int, default=defaults.n_estimators
+        "--n-estimators", type=positive_int, default=defaults.n_estimators
     )
-    parser.add_argument("--max-depth", type=_positive_int, default=defaults.max_depth)
+    parser.add_argument("--max-depth", type=positive_int, default=defaults.max_depth)
     parser.add_argument(
-        "--learning-rate", type=_positive_float, default=defaults.learning_rate
+        "--learning-rate", type=positive_float, default=defaults.learning_rate
     )
     parser.add_argument(
         "--balance",

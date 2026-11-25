@@ -7,8 +7,9 @@ Uso:
     python -m src.etl --dataset cicids2017 --raw-dir /ruta/a/los/csv
     python -m src.etl --dataset cicids2017 --kaggle-dataset usuario/dataset
 
-Los árboles consumen los parquets sin escalar. El Autoencoder aplica encima el
-`StandardScaler`, ajustado exclusivamente con el tráfico benigno de Train.
+Los árboles consumen los parquets sin escalar. El `StandardScaler` se ajusta
+exclusivamente con el tráfico benigno de Train y queda como referencia: el
+Autoencoder comprime las colas antes de escalar y ajusta el suyo.
 """
 
 from __future__ import annotations
@@ -975,7 +976,7 @@ def run_etl(
             "type": type(scaler).__name__,
             "fitted_on": "train_benign",
             "flows": int(np.max(scaler.n_samples_seen_)),
-            "used_by": "autoencoder (los árboles usan los parquets sin escalar)",
+            "used_by": "referencia en escala física (el autoencoder ajusta el suyo)",
         },
         "artifacts": {
             name: {"file": paths[name].name, "sha256": sha256_file(paths[name])}

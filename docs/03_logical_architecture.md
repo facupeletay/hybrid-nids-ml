@@ -12,6 +12,9 @@ flowchart LR
     etl -->|parquet| autoencoder
     baseline_xgb --> hybrid_eval
     autoencoder --> hybrid_eval
+    common --> baseline_xgb
+    common --> autoencoder
+    metrics --> common
     metrics --> baseline_xgb
     metrics --> autoencoder
     metrics --> hybrid_eval
@@ -22,6 +25,7 @@ flowchart LR
 |---|---|---|
 | `config.py` | Rutas, constantes, listas anti-leakage | Tocar el disco al importarse |
 | `etl.py` | Todo lo específico de cada dataset | Modelar |
+| `common.py` | Utilidades de las capas de modelado | Importar frameworks de ML |
 | `baseline_xgb.py` | Capa supervisada | Conocer el dataset de origen |
 | `autoencoder.py` | Capa no supervisada | Ver ataques al entrenar |
 | `hybrid_eval.py` | Fusión y LOAO | Calibrar con Test |
@@ -48,7 +52,7 @@ Invariantes: `is_attack == 0` ⇔ `attack_family == "BENIGN"`; mismas columnas y
 
 ### 2.2 Scores
 
-Vector 1-D de punto flotante, finito, mayor = más sospechoso, alineado por fila con el split. La alerta es `score >= threshold`. Val y Test deben usar el **mismo dtype**: el umbral se calcula en el de Val. La capa supervisada usa siempre `float64`.
+Vector 1-D de punto flotante, finito, mayor = más sospechoso, alineado por fila con el split. La alerta es `score >= threshold`. Val y Test deben usar el **mismo dtype**: el umbral se calcula en el de Val. Ambas capas usan siempre `float64`.
 
 ### 2.3 Artefactos
 
@@ -56,7 +60,8 @@ Vector 1-D de punto flotante, finito, mayor = más sospechoso, alineado por fila
 |---|---|
 | Modelo supervisado | `models/xgb_baseline_<dataset><sufijo>.json` (XGBoost) / `.txt` (LightGBM) |
 | Reporte supervisado | `metrics/xgb_baseline_<dataset><sufijo>.json` |
-| Autoencoder | `models/<dataset>_autoencoder.pt` |
+| Autoencoder | `models/autoencoder_<dataset><sufijo>.pt` (autocontenido) |
+| Reporte del Autoencoder | `metrics/autoencoder_<dataset><sufijo>.json` |
 | Scaler (benigno de Train) | `data/processed/<dataset>/scaler_<dataset>.joblib` |
 | Metadata del ETL | `data/processed/<dataset>/etl_metadata_<dataset>.json` |
 | Otras métricas | `metrics/<dataset>_<experimento>.json` |
@@ -64,7 +69,7 @@ Vector 1-D de punto flotante, finito, mayor = más sospechoso, alineado por fila
 
 El `<sufijo>` combina `--tag`, `_lgbm` y `_no_dst_port`, para que ninguna variante pise a otra.
 
-Las métricas indefinidas valen `nan` en memoria y `null` en los reportes, que son JSON estricto (`baseline_xgb.to_strict_json`).
+Las métricas indefinidas valen `nan` en memoria y `null` en los reportes, que son JSON estricto (`common.to_strict_json`).
 
 ## 3. API implementada
 
@@ -77,6 +82,8 @@ Las métricas indefinidas valen `nan` en memoria y `null` en los reportes, que s
 | `get_split_path(dataset, split)` | Ruta del parquet del split |
 | `get_scaler_path(dataset)`, `get_etl_metadata_path(dataset)` | Rutas de los demás artefactos del ETL |
 | `get_baseline_model_path(dataset, tag, extension)`, `get_baseline_report_path(dataset, tag)` | Rutas de la capa supervisada |
+| `get_autoencoder_checkpoint_path(dataset, suffix)`, `get_autoencoder_report_path(dataset, suffix)` | Rutas del Autoencoder |
+| `FOCUS_ATTACKS` | Etiquetas destacadas en los reportes, por dataset |
 | `find_leakage_columns(columns)` | Columnas prohibidas presentes, tolerante a formato |
 | `get_feature_columns(columns)` | Columnas que no son metadata |
 | `ensure_directories()` | Crea carpetas; advierte si es Colab sin Drive |
@@ -102,6 +109,16 @@ Las métricas indefinidas valen `nan` en memoria y `null` en los reportes, que s
 
 Teoría y decisiones: [ETL y anti-leakage](theory/01_etl_and_anti_leakage.md).
 
+### `common.py`
+
+| Símbolo | Contrato |
+|---|---|
+| `select_features(columns, drop_dst_port)` | Features y columnas quitadas; `ValueError` si no hay puerto que quitar |
+| `calibrate_thresholds(y_val, score_val, budgets)` | Umbral por presupuesto; no recibe Test |
+| `normalize_tag(tag)` | Tag validado, con `_` inicial |
+| `in_dir(path, directory)`, `to_strict_json(value)`, `write_report(path, report)` | Persistencia de reportes |
+| `positive_int`, `positive_float` | Tipos de argparse |
+
 ### `baseline_xgb.py`
 
 | Símbolo | Contrato |
@@ -109,7 +126,6 @@ Teoría y decisiones: [ETL y anti-leakage](theory/01_etl_and_anti_leakage.md).
 | `TrainParams` | Hiperparámetros, balance y device; `ValueError` si son inválidos |
 | `train_supervised(train, val, features, params)` | `SupervisedModel` recortado a su mejor iteración y datos del ajuste |
 | `score_supervised(model, flows)` | `P(ataque)` en `float64`, finita |
-| `calibrate_thresholds(y_val, score_val, budgets)` | Umbral por presupuesto; no recibe Test |
 | `find_train_twins(train, flows, features)` | Máscara de vectores exactos presentes en Train |
 | `breakdown_by_attack(labels, alerts, twins, train_counts)` | Recall con y sin gemelos; `seen` y `unseen` separados |
 | `fit_and_evaluate(splits, params, drop_dst_port)` | Protocolo completo en memoria: modelo y reporte |
@@ -118,6 +134,25 @@ Teoría y decisiones: [ETL y anti-leakage](theory/01_etl_and_anti_leakage.md).
 | `load_baseline(dataset, suffix, …)` | Modelo y reporte verificados; `ArtifactError` si no coinciden |
 
 Es binaria. Teoría, resultados y límites: [Capa supervisada](theory/02_supervised_soc_baseline.md).
+
+### `autoencoder.py`
+
+| Símbolo | Contrato |
+|---|---|
+| `AutoencoderParams` | Hiperparámetros y device; `ValueError` si son inválidos |
+| `benign_rows(frame)` | Filas `is_attack == 0`; única entrada de datos al ajuste |
+| `FlowAEPreprocessor` | `fit`, `transform` (`float32` en `[-clip_z, clip_z]`), `state_dict` |
+| `FlowAutoencoder` | Red simétrica con `LayerNorm` y `SiLU` |
+| `train_autoencoder(benign_train, benign_val, params)` | Modelo de la mejor época y curva; recibe matrices sin etiquetas |
+| `fit(train, val, features, params)` | Filtra benignos y ajusta preprocesador y modelo |
+| `reconstruction_error(model, flows, metric, device)` | Error por fila en `float64` |
+| `score_dataframe(checkpoint_path, df, device)` | Scores `float64` a partir del checkpoint; **API para `hybrid_eval`** |
+| `save_checkpoint`, `load_checkpoint` | Checkpoint autocontenido, con `weights_only=True` |
+| `evaluate(val, test, score, focus_attacks)` | Calibra en Val benigno y mide Test |
+| `load_autoencoder(dataset, suffix, …)` | Ruta y reporte verificados; `ArtifactError` si no coinciden |
+| `run(dataset, params, drop_dst_port, tag, …)` | Carga, ejecuta, persiste y devuelve el reporte |
+
+Teoría, resultados y límites: [Autoencoder](theory/03_autoencoder_zero_day.md).
 
 ## 4. Rutas dinámicas
 
@@ -136,9 +171,10 @@ Es binaria. Teoría, resultados y límites: [Capa supervisada](theory/02_supervi
 |---|---|---|
 | `src/config.py` | ✅ Implementado | `tests/test_config.py` |
 | `src/metrics.py` | ✅ Implementado | `tests/test_metrics.py` |
+| `src/common.py` | ✅ Implementado | Vía las pruebas de ambas capas |
 | `src/etl.py` | ✅ `cicids2017` · 🚧 `unsw_nb15` (adaptador pendiente) | `tests/test_etl.py` |
 | `src/baseline_xgb.py` | ✅ Binario (XGBoost, LightGBM) | `tests/test_baseline_xgb.py` |
-| `src/autoencoder.py` | 🚧 Stub | — |
+| `src/autoencoder.py` | ✅ Implementado | `tests/test_autoencoder.py` |
 | `src/hybrid_eval.py` | 🚧 Stub | — |
 | `src/visualize.py` | 🚧 Stub | — |
 | `notebooks/` | 🚧 Vacío | — |

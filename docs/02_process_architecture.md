@@ -82,9 +82,9 @@ El embargo es **por conversación** y no por ventana horaria: con resolución de
 
 ### 6.2 Autoencoder
 
-- Entrena **solo con `BENIGN` de Train**; el escalado se ajusta sobre ese mismo subconjunto.
+- Entrena **solo con `BENIGN` de Train**; `signed_log1p`, el escalado y el recorte se ajustan sobre ese mismo subconjunto.
 - *Early stopping* con la pérdida sobre Val **benigno**.
-- Score: error de reconstrucción por flujo.
+- Score: error de reconstrucción por flujo, en `float64`. Detalle en [Autoencoder](theory/03_autoencoder_zero_day.md).
 
 ### 6.3 Fusión
 

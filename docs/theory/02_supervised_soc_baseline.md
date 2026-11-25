@@ -172,10 +172,10 @@ El modelo se escribe en bytes: en modo texto, Windows convierte `\n` en `\r\n` y
 | Balance y device | `compute_scale_pos_weight`, `resolve_device` |
 | Entrenamiento y early stopping | `train_supervised` |
 | Scores `float64` | `score_supervised` |
-| Umbrales por presupuesto | `calibrate_thresholds` |
+| Umbrales por presupuesto | `common.calibrate_thresholds` |
 | Gemelos | `find_train_twins`, `summarize_twins` |
 | Recall por ataque, vistos y no vistos | `breakdown_by_attack`, `evaluate_test` |
-| Ablación | `select_features`, `compare_ablation` |
+| Ablación | `common.select_features`, `compare_ablation` |
 | Importancia | `top_features` |
 | Persistencia | `save_model`, `load_model`, `load_baseline` |
 | Orquestación | `fit_and_evaluate` (sin disco), `run` |

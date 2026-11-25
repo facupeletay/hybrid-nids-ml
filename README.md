@@ -2,7 +2,7 @@
 
 Sistema **híbrido** de detección de intrusiones en red sobre flujos NetFlow. Combina un clasificador supervisado para ataques conocidos con un Autoencoder entrenado solo con tráfico benigno para ataques desconocidos, y se evalúa con las restricciones de un SOC real: **FPR < 0.1 %**.
 
-> **Estado:** en desarrollo. Están listos la documentación, la configuración, las métricas, el ETL de CIC-IDS2017 y la capa supervisada. El Autoencoder y la fusión son stubs.
+> **Estado:** en desarrollo. Están listos la documentación, la configuración, las métricas, el ETL de CIC-IDS2017, la capa supervisada y el Autoencoder. La fusión y LOAO son stubs.
 
 ## Arquitectura
 
@@ -54,6 +54,7 @@ Cada dataset tiene un adaptador en el ETL que emite un esquema común; el modela
 | [03 · Arquitectura lógica](docs/03_logical_architecture.md) | Módulos, contratos, rutas y estado |
 | [ETL y anti-leakage](docs/theory/01_etl_and_anti_leakage.md) | Limpieza, split por campaña, purga de sesiones y cifras medidas |
 | [Capa supervisada](docs/theory/02_supervised_soc_baseline.md) | Calibración por FPR, gemelos, ablación y puntos ciegos |
+| [Autoencoder](docs/theory/03_autoencoder_zero_day.md) | Variedad benigna, colas pesadas, umbral sin ataques y resultados |
 
 ## Estado del proyecto
 
@@ -63,7 +64,7 @@ Cada dataset tiene un adaptador en el ETL que emite un esquema común; el modela
 | `src/config.py`, `src/metrics.py` | ✅ Implementados y probados |
 | `src/etl.py` | ✅ `cicids2017` · 🚧 `unsw_nb15` |
 | `src/baseline_xgb.py` | ✅ Binario (XGBoost, LightGBM) |
-| `src/autoencoder.py` | 🚧 Stub |
+| `src/autoencoder.py` | ✅ Implementado |
 | `src/hybrid_eval.py` | 🚧 Stub |
 | `src/visualize.py` | 🚧 Stub |
 
@@ -85,6 +86,9 @@ python -m src.etl --dataset cicids2017 --kaggle-dataset hgiabo2k5/generatedlabel
 
 # Capa supervisada, con ablación del puerto destino
 python -m src.baseline_xgb --dataset cicids2017 --run-ablation
+
+# Autoencoder (GPU automática si hay CUDA)
+python -m src.autoencoder --dataset cicids2017
 ```
 
 En Google Colab, montar Drive antes de importar `src.config`. Datos, modelos y métricas persisten en `/content/drive/MyDrive/hybrid_nids/`.
