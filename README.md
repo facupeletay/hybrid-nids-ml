@@ -2,7 +2,7 @@
 
 Sistema **híbrido** de detección de intrusiones en red sobre flujos NetFlow. Combina un clasificador supervisado para ataques conocidos con un Autoencoder entrenado solo con tráfico benigno para ataques desconocidos, y se evalúa con las restricciones de un SOC real: **FPR < 0.1 %**.
 
-> **Estado:** inicialización. Están listos la documentación, la configuración y las métricas. El ETL y los modelos son stubs; todavía no hay resultados.
+> **Estado:** en desarrollo. Están listos la documentación, la configuración, las métricas y el ETL de CIC-IDS2017. Los modelos son stubs; todavía no hay resultados.
 
 ## Arquitectura
 
@@ -33,7 +33,7 @@ Cada dataset tiene un adaptador en el ETL que emite un esquema común; el modela
 
 1. IPs, `Flow ID`, puerto de origen, timestamps e índices **nunca** son features.
 2. El puerto destino y los TTL de UNSW-NB15 exigen ablación (*shortcut learning*).
-3. Split por bloques temporales y sesiones, con embargo. Sin splits aleatorios.
+3. Split cronológico por campaña, sin partir sesiones en la frontera. Sin splits aleatorios.
 4. Escalado y selección de features ajustados solo con Train.
 5. Umbrales calibrados **solo en Validación**. Test se evalúa una vez.
 6. En LOAO, la familia excluida sale de Train y de Val.
@@ -52,6 +52,7 @@ Cada dataset tiene un adaptador en el ETL que emite un esquema común; el modela
 | [01 · Teoría de dominio](docs/01_domain_theory.md) | NIDS/HIDS, flujos, firmas de ataque, datasets y el problema del SOC |
 | [02 · Arquitectura de procesos](docs/02_process_architecture.md) | Flujo de punta a punta, splits, calibración y LOAO |
 | [03 · Arquitectura lógica](docs/03_logical_architecture.md) | Módulos, contratos, rutas y estado |
+| [ETL y anti-leakage](docs/theory/01_etl_and_anti_leakage.md) | Limpieza, split por campaña, purga de sesiones y cifras medidas |
 
 ## Estado del proyecto
 
@@ -59,7 +60,7 @@ Cada dataset tiene un adaptador en el ETL que emite un esquema común; el modela
 |---|---|
 | Documentación | ✅ Completa |
 | `src/config.py`, `src/metrics.py` | ✅ Implementados y probados |
-| `src/etl.py` | 🚧 Stub |
+| `src/etl.py` | ✅ `cicids2017` · 🚧 `unsw_nb15` |
 | `src/baseline_xgb.py` | 🚧 Stub |
 | `src/autoencoder.py` | 🚧 Stub |
 | `src/hybrid_eval.py` | 🚧 Stub |
@@ -76,6 +77,10 @@ pip install -r requirements.txt
 
 python -m src.config             # muestra la configuración activa
 python -m unittest -v            # pruebas
+
+# ETL: carpeta con los CSV de GeneratedLabelledFlows, o un mirror de Kaggle
+python -m src.etl --dataset cicids2017 --raw-dir RUTA
+python -m src.etl --dataset cicids2017 --kaggle-dataset hgiabo2k5/generatedlabelledflows
 ```
 
 En Google Colab, montar Drive antes de importar `src.config`. Datos, modelos y métricas persisten en `/content/drive/MyDrive/hybrid_nids/`.

@@ -55,7 +55,17 @@ class ConstantsTest(unittest.TestCase):
 class PathHelpersTest(unittest.TestCase):
     def test_split_path(self):
         path = config.get_split_path("unsw_nb15", "val")
-        self.assertEqual(path, config.PROCESSED_DIR / "unsw_nb15" / "val.parquet")
+        expected = config.PROCESSED_DIR / "unsw_nb15" / "val_unsw_nb15.parquet"
+        self.assertEqual(path, expected)
+
+    def test_etl_artifacts_share_directory(self):
+        base = config.get_processed_dir("cicids2017")
+        self.assertEqual(config.get_scaler_path("cicids2017").parent, base)
+        self.assertEqual(config.get_etl_metadata_path("cicids2017").parent, base)
+
+    def test_metadata_is_never_a_feature(self):
+        columns = ["Flow Duration", *config.METADATA_COLUMNS]
+        self.assertEqual(config.get_feature_columns(columns), ["Flow Duration"])
 
     def test_rejects_unknown_dataset_and_split(self):
         with self.assertRaises(ValueError):

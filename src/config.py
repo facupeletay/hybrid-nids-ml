@@ -70,8 +70,17 @@ TARGET_FPR_BUDGETS = (0.001, 0.005, 0.01)
 # --------------------------------------------------------------------------
 BENIGN_LABEL = "BENIGN"
 TARGET_COLUMN = "is_attack"  # int8: 0 = benigno, 1 = ataque
-ATTACK_LABEL_COLUMN = "attack_label"  # etiqueta original normalizada
+ATTACK_LABEL_COLUMN = "label_raw"  # etiqueta original normalizada
 ATTACK_FAMILY_COLUMN = "attack_family"  # familia canónica (unidad de LOAO)
+CAMPAIGN_COLUMN = "campaign_day"  # captura de origen (día y franja)
+
+# Viajan en los parquets, pero nunca son features.
+METADATA_COLUMNS = (
+    TARGET_COLUMN,
+    ATTACK_FAMILY_COLUMN,
+    ATTACK_LABEL_COLUMN,
+    CAMPAIGN_COLUMN,
+)
 
 # --------------------------------------------------------------------------
 # Anti-leakage
@@ -128,6 +137,11 @@ def find_leakage_columns(columns: Iterable[str]) -> list[str]:
     return [c for c in columns if normalize_column_name(c) in _LEAKAGE_KEYS]
 
 
+def get_feature_columns(columns: Iterable[str]) -> list[str]:
+    """Devuelve las columnas de un parquet procesado que son features."""
+    return [c for c in columns if c not in METADATA_COLUMNS]
+
+
 # --------------------------------------------------------------------------
 # Helpers de rutas
 # --------------------------------------------------------------------------
@@ -154,7 +168,17 @@ def get_split_path(dataset: str, split: str) -> Path:
     """Ruta del parquet de un split (`train`, `val` o `test`)."""
     if split not in SPLITS:
         raise ValueError(f"Split inválido: {split!r}. Opciones: {SPLITS}")
-    return get_processed_dir(dataset) / f"{split}.parquet"
+    return get_processed_dir(dataset) / f"{split}_{dataset}.parquet"
+
+
+def get_scaler_path(dataset: str = DEFAULT_DATASET) -> Path:
+    """Ruta del scaler ajustado en el tráfico benigno de Train."""
+    return get_processed_dir(dataset) / f"scaler_{dataset}.joblib"
+
+
+def get_etl_metadata_path(dataset: str = DEFAULT_DATASET) -> Path:
+    """Ruta del JSON con la trazabilidad del ETL."""
+    return get_processed_dir(dataset) / f"etl_metadata_{dataset}.json"
 
 
 def ensure_directories() -> None:

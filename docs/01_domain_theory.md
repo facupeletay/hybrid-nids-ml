@@ -58,12 +58,13 @@ Grupos de features típicos de CICFlowMeter:
 |---|---|---|---|
 | `PortScan` | PortScan | 1–2 paquetes, casi sin payload, SYN con respuesta RST o sin respuesta | Sí, aunque la señal fuerte es *agregada* |
 | `BruteForce` | FTP-Patator, SSH-Patator | Sesiones cortas y repetidas al mismo servicio, tamaños muy regulares | Parcialmente |
-| `DoS` | Hulk, GoldenEye, slowloris, Slowhttptest | Volumétrico o de retención (ver 3.3) | Sí |
+| `DoS` | Hulk, GoldenEye, slowloris, Slowhttptest, Heartbleed | Volumétrico o de retención (ver 3.3) | Sí |
 | `DDoS` | DDoS | Como el volumétrico, con origen distribuido | Sí |
-| `Botnet` | Bot | Conexiones periódicas y pequeñas hacia un C2 | Débil: la periodicidad es entre flujos |
+| `Bot` | Bot | Conexiones periódicas y pequeñas hacia un C2 | Débil: la periodicidad es entre flujos |
 | `WebAttack` | Brute Force, XSS, SQL Injection | HTTP legítimo en forma; el ataque está en el payload | Débil |
 | `Infiltration` | Infiltration | Descarga de malware y movimiento lateral | Débil, y muy pocas muestras |
-| `Heartbleed` | Heartbleed | Explotación de TLS: respuestas desproporcionadas al pedido. Ocurre el día de DoS, pero no es DoS | Sí, pero hay 11 muestras |
+
+Heartbleed no es un DoS (explota TLS para filtrar memoria). Se agrupa ahí porque 11 flujos de una única conexión no sostienen una familia propia; `label_raw` lo conserva separado.
 
 ### 3.1 PortScan
 
@@ -127,9 +128,9 @@ Problemas conocidos que el ETL debe tratar:
 
 - **Dos distribuciones.** `GeneratedLabelledFlows` conserva IPs, puertos y timestamp; `MachineLearningCSV` los quita, salvo `Destination Port`. El split temporal y por sesión **requiere la primera**.
 - Encabezados con espacios iniciales y `Fwd Header Length` duplicada.
-- `Inf` y `NaN` en `Flow Bytes/s` y `Flow Packets/s`.
+- `Inf` y `NaN` en `Flow Bytes/s` y `Flow Packets/s`, siempre con duración 0.
 - Guion mal codificado en las etiquetas `Web Attack`, y filas vacías en el archivo del jueves a la mañana.
-- Timestamps en formato de 12 h sin AM/PM y, en varios archivos, con resolución de minutos.
+- Timestamps en formato de 12 h sin AM/PM y, salvo el lunes, con resolución de minutos.
 - Errores de etiquetado y de construcción de flujos documentados en la literatura (Engelen et al., 2021; Lanvin et al., 2022). Los resultados no deben leerse como rendimiento en producción.
 - **Cada ataque ocurre en una única ventana**: un corte temporal global deja familias enteras fuera de Train.
 
@@ -174,7 +175,7 @@ Aun con 0.1 %, 11 de cada 12 alertas son falsas. Por eso el FPR es una **restric
 - **Accuracy** no informa: predecir siempre `BENIGN` da 80 % en CIC-IDS2017.
 - **ROC-AUC** es optimista: integra sobre FPR que ningún SOC toleraría.
 - **PR-AUC** refleja el costo de los falsos positivos, pero depende de la prevalencia: solo se compara sobre el mismo test.
-- El **recall agregado** lo dominan Hulk, PortScan y DDoS (93 % de los ataques). Puede rondar 0.99 con Botnet en 0. De ahí el desglose por familia y el `macro_recall`.
+- El **recall agregado** lo dominan Hulk, PortScan y DDoS (93 % de los ataques). Puede rondar 0.99 con Bot en 0. De ahí el desglose por familia y el `macro_recall`.
 - Con 11 o 21 muestras, un recall de 1.0 no es evidencia: siempre se reporta junto a `n`.
 
 ### 5.3 Zero-day
@@ -183,4 +184,4 @@ Un clasificador supervisado reparte todo el espacio entre las clases que conoce,
 
 La evaluación aleatoria habitual no mide esto, porque todas las familias aparecen en Train. **Leave-One-Attack-Out** lo simula: se quita una familia de Train y Val, y se mide su detección en Test.
 
-Expectativa honesta: el Autoencoder debería detectar desvíos volumétricos o temporales marcados, y tener dificultades con los ataques que imitan tráfico legítimo (WebAttack, Botnet) a 0.1 % de FPR. El protocolo está para cuantificarlo.
+Expectativa honesta: el Autoencoder debería detectar desvíos volumétricos o temporales marcados, y tener dificultades con los ataques que imitan tráfico legítimo (WebAttack, Bot) a 0.1 % de FPR. El protocolo está para cuantificarlo.

@@ -25,15 +25,16 @@ flowchart TD
 
 ## 2. Ingesta
 
-- `--dataset {cicids2017,unsw_nb15}` selecciona el adaptador.
+- `--dataset {cicids2017,unsw_nb15}` selecciona el adaptador; `--raw-dir` y `--kaggle-dataset` eligen la fuente.
+- UNB exige un formulario de registro: la URL directa ya no entrega el ZIP. Detalle en [ETL y anti-leakage](theory/01_etl_and_anti_leakage.md#3-ingesta).
 - Los crudos se guardan en `data/raw/<dataset>/` y no se modifican.
-- La lectura es por archivo y con tipos reducidos (`float32`) para no agotar la RAM de Colab.
+- La lectura es por archivo y las features se reducen a `float32` para no agotar la RAM de Colab.
 - El adaptador traduce etiquetas y emite el [esquema común](03_logical_architecture.md#2-contratos-de-datos).
 
 ## 3. Limpieza
 
 1. Normalizar encabezados y etiquetas; eliminar filas vacías.
-2. `Inf` → `NaN`. Eliminar las filas afectadas si son una fracción marginal; registrar cuántas y de qué clase.
+2. `Inf` → `NaN`; eliminar las filas afectadas (0.1 %) y las de duración o cabecera negativa. Los IAT negativos se llevan a 0 y el centinela `-1` de `Init_Win_bytes_*` se conserva. Se registra cuántas y de qué clase.
 3. Eliminar columnas duplicadas y constantes (la constancia se decide **mirando solo Train**).
 4. Eliminar duplicados **exactos, metadata incluida** (el mismo flujo exportado dos veces).
 
@@ -61,12 +62,12 @@ Un split aleatorio pone flujos vecinos de la misma campaña en Train y Test e in
 
 Estrategia: **bloques temporales contiguos dentro de cada campaña**.
 
-1. Por cada día y etiqueta, ordenar por timestamp.
-2. Dividir en bloques contiguos: 60 % Train, 20 % Val, 20 % Test.
-3. Asignar cada sesión (5-tupla bidireccional cercana en el tiempo) a un único split.
-4. Dejar un *embargo* entre bloques y descartar los flujos que caen en él.
+1. Por cada campaña `(campaign_day, label_raw)`, ordenar por timestamp.
+2. Dividir en bloques contiguos: 70 % Train, 15 % Val, 15 % Test, cortando siempre entre timestamps distintos.
+3. Enviar completas a Test las campañas de menos de 50 flujos (Heartbleed, SQL Injection, Infiltration): se reportan, pero no sostienen conclusiones.
+4. Purgar del lado anterior los flujos cuya 5-tupla reaparece en un split posterior a 65 s o menos.
 
-El embargo debe ser mayor que la resolución del timestamp, que en CIC-IDS2017 puede ser de un minuto. Las familias ínfimas (Heartbleed, SQL Injection, Infiltration) se reportan, pero no sostienen conclusiones.
+El embargo es **por conversación** y no por ventana horaria: con resolución de un minuto y campañas de 8 a 25 minutos, un embargo general eliminaría fracciones enteras (un solo minuto concentra el 28 % de PortScan). Criterio y sensibilidad en [ETL y anti-leakage](theory/01_etl_and_anti_leakage.md#6-split-temporal-por-campaña).
 
 **Tamaño de Val.** Estimar un FPR de 0.1 % exige muchos benignos: con 100 000, el error estándar es ~0.01 puntos porcentuales; con 1 000, el umbral depende de un único flujo.
 
