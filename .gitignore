@@ -1,0 +1,20 @@
+# Datos (la fuente de verdad vive en Google Drive)
+data/
+*.csv
+*.parquet
+*.pcap
+*.zip
+
+# Modelos, métricas y figuras generadas
+models/*.pt
+models/*.json
+models/*.joblib
+metrics/*.json
+reports/figures/*.png
+
+# Python
+.venv/
+__pycache__/
+
+# Jupyter
+.ipynb_checkpoints/
