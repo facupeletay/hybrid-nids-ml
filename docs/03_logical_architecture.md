@@ -48,20 +48,23 @@ Invariantes: `is_attack == 0` ⇔ `attack_family == "BENIGN"`; mismas columnas y
 
 ### 2.2 Scores
 
-Vector 1-D de punto flotante, finito, mayor = más sospechoso, alineado por fila con el split. La alerta es `score >= threshold`. Val y Test deben usar el **mismo dtype**: el umbral se calcula en el de Val.
+Vector 1-D de punto flotante, finito, mayor = más sospechoso, alineado por fila con el split. La alerta es `score >= threshold`. Val y Test deben usar el **mismo dtype**: el umbral se calcula en el de Val. La capa supervisada usa siempre `float64`.
 
 ### 2.3 Artefactos
 
 | Artefacto | Ruta |
 |---|---|
-| Modelo supervisado | `models/<dataset>_<backend>_<task>.json` / `.joblib` |
+| Modelo supervisado | `models/xgb_baseline_<dataset><sufijo>.json` (XGBoost) / `.txt` (LightGBM) |
+| Reporte supervisado | `metrics/xgb_baseline_<dataset><sufijo>.json` |
 | Autoencoder | `models/<dataset>_autoencoder.pt` |
 | Scaler (benigno de Train) | `data/processed/<dataset>/scaler_<dataset>.joblib` |
 | Metadata del ETL | `data/processed/<dataset>/etl_metadata_<dataset>.json` |
-| Métricas | `metrics/<dataset>_<experimento>.json` |
+| Otras métricas | `metrics/<dataset>_<experimento>.json` |
 | Figuras | `reports/figures/<dataset>_<figura>.png` |
 
-Las métricas indefinidas valen `nan`. `json.dumps` las escribe como `NaN`, que Python relee pero no es JSON estricto: quien las consuma desde otra herramienta debe convertirlas a `null`.
+El `<sufijo>` combina `--tag`, `_lgbm` y `_no_dst_port`, para que ninguna variante pise a otra.
+
+Las métricas indefinidas valen `nan` en memoria y `null` en los reportes, que son JSON estricto (`baseline_xgb.to_strict_json`).
 
 ## 3. API implementada
 
@@ -73,6 +76,7 @@ Las métricas indefinidas valen `nan`. `json.dumps` las escribe como `NaN`, que 
 | `get_raw_dir(dataset)`, `get_processed_dir(dataset)` | Ruta; `ValueError` si el dataset no está soportado |
 | `get_split_path(dataset, split)` | Ruta del parquet del split |
 | `get_scaler_path(dataset)`, `get_etl_metadata_path(dataset)` | Rutas de los demás artefactos del ETL |
+| `get_baseline_model_path(dataset, tag, extension)`, `get_baseline_report_path(dataset, tag)` | Rutas de la capa supervisada |
 | `find_leakage_columns(columns)` | Columnas prohibidas presentes, tolerante a formato |
 | `get_feature_columns(columns)` | Columnas que no son metadata |
 | `ensure_directories()` | Crea carpetas; advierte si es Colab sin Drive |
@@ -94,8 +98,26 @@ Las métricas indefinidas valen `nan`. `json.dumps` las escribe como `NaN`, que 
 | `EtlConfig` | Fracciones, tamaño mínimo de campaña y gap de sesión |
 | `DatasetAdapter` | Interfaz por dataset: `obtain`, `find_sources`, `load` |
 | `RawDataError` | Crudos ausentes, inaccesibles o no utilizables |
+| `atomic_write(path, write)`, `sha256_file(path)` | Escritura atómica y hash, reutilizados por los modelos |
 
 Teoría y decisiones: [ETL y anti-leakage](theory/01_etl_and_anti_leakage.md).
+
+### `baseline_xgb.py`
+
+| Símbolo | Contrato |
+|---|---|
+| `TrainParams` | Hiperparámetros, balance y device; `ValueError` si son inválidos |
+| `train_supervised(train, val, features, params)` | `SupervisedModel` recortado a su mejor iteración y datos del ajuste |
+| `score_supervised(model, flows)` | `P(ataque)` en `float64`, finita |
+| `calibrate_thresholds(y_val, score_val, budgets)` | Umbral por presupuesto; no recibe Test |
+| `find_train_twins(train, flows, features)` | Máscara de vectores exactos presentes en Train |
+| `breakdown_by_attack(labels, alerts, twins, train_counts)` | Recall con y sin gemelos; `seen` y `unseen` separados |
+| `fit_and_evaluate(splits, params, drop_dst_port)` | Protocolo completo en memoria: modelo y reporte |
+| `compare_ablation(with_port, without_port)` | Impacto de quitar el puerto destino |
+| `run(dataset, params, drop_dst_port, run_ablation, tag, …)` | Carga, ejecuta, persiste y devuelve el reporte |
+| `load_baseline(dataset, suffix, …)` | Modelo y reporte verificados; `ArtifactError` si no coinciden |
+
+Es binaria. Teoría, resultados y límites: [Capa supervisada](theory/02_supervised_soc_baseline.md).
 
 ## 4. Rutas dinámicas
 
@@ -115,7 +137,7 @@ Teoría y decisiones: [ETL y anti-leakage](theory/01_etl_and_anti_leakage.md).
 | `src/config.py` | ✅ Implementado | `tests/test_config.py` |
 | `src/metrics.py` | ✅ Implementado | `tests/test_metrics.py` |
 | `src/etl.py` | ✅ `cicids2017` · 🚧 `unsw_nb15` (adaptador pendiente) | `tests/test_etl.py` |
-| `src/baseline_xgb.py` | 🚧 Stub | — |
+| `src/baseline_xgb.py` | ✅ Binario (XGBoost, LightGBM) | `tests/test_baseline_xgb.py` |
 | `src/autoencoder.py` | 🚧 Stub | — |
 | `src/hybrid_eval.py` | 🚧 Stub | — |
 | `src/visualize.py` | 🚧 Stub | — |

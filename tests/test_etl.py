@@ -781,7 +781,7 @@ class LoadArtifactsTest(EtlTestCase):
             raise OSError("disco lleno")
 
         with self.assertRaises(OSError):
-            etl._atomic_write(path, broken)
+            etl.atomic_write(path, broken)
         self.assertEqual(path.read_text(), "previo")
         self.assertEqual([p.name for p in self.root.iterdir()], ["a.txt"])
 

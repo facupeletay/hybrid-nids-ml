@@ -120,7 +120,7 @@ class EtlArtifacts:
 # --------------------------------------------------------------------------
 # Archivos
 # --------------------------------------------------------------------------
-def _sha256(path: Path) -> str:
+def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         while chunk := handle.read(1 << 20):
@@ -128,7 +128,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _atomic_write(path: Path, write: Callable[[Path], Any]) -> None:
+def atomic_write(path: Path, write: Callable[[Path], Any]) -> None:
     """Escribe en un temporal de la misma carpeta y renombra al final."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
@@ -331,7 +331,7 @@ class CicIds2017Adapter(DatasetAdapter):
                         with bundle.open(info) as src, tmp.open("wb") as dst:
                             shutil.copyfileobj(src, dst, 1 << 20)
 
-                    _atomic_write(raw_dir / name, write)
+                    atomic_write(raw_dir / name, write)
         except zipfile.BadZipFile as error:
             raise RawDataError(f"{archive} está corrupto: {error}. Borralo y reejecutá") from error
 
@@ -340,7 +340,7 @@ class CicIds2017Adapter(DatasetAdapter):
 
         logger.info("Descargando %s vía kagglehub", slug)
         for source in self.find_sources(Path(kagglehub.dataset_download(slug))):
-            _atomic_write(
+            atomic_write(
                 raw_dir / source.name,
                 lambda tmp, source=source: shutil.copyfile(source, tmp),
             )
@@ -645,7 +645,7 @@ def load_raw(
         report = {
             "file": path.name,
             "bytes": path.stat().st_size,
-            "sha256": _sha256(path),
+            "sha256": sha256_file(path),
             **report,
         }
         logger.info(
@@ -933,14 +933,14 @@ def run_etl(
 
     for name in SPLITS:
         frame = frames[name]
-        _atomic_write(
+        atomic_write(
             paths[name],
             lambda tmp, frame=frame: frame.to_parquet(
                 tmp, index=False, compression="zstd"
             ),
         )
         logger.info("%s: %d flujos -> %s", name, len(frame), paths[name])
-    _atomic_write(paths["scaler"], lambda tmp: joblib.dump(scaler, tmp))
+    atomic_write(paths["scaler"], lambda tmp: joblib.dump(scaler, tmp))
 
     metadata = {
         "schema_version": SCHEMA_VERSION,
@@ -978,12 +978,12 @@ def run_etl(
             "used_by": "autoencoder (los árboles usan los parquets sin escalar)",
         },
         "artifacts": {
-            name: {"file": paths[name].name, "sha256": _sha256(paths[name])}
+            name: {"file": paths[name].name, "sha256": sha256_file(paths[name])}
             for name in (*SPLITS, "scaler")
         },
     }
     # Último: su presencia, con hashes válidos, marca un ETL completo.
-    _atomic_write(
+    atomic_write(
         paths["metadata"],
         lambda tmp: tmp.write_text(
             json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -1038,7 +1038,7 @@ def load_artifacts(
     for name in (*splits, "scaler"):
         if not paths[name].is_file():
             raise ArtifactError(f"Falta {paths[name]}")
-        if _sha256(paths[name]) != metadata["artifacts"][name]["sha256"]:
+        if sha256_file(paths[name]) != metadata["artifacts"][name]["sha256"]:
             raise ArtifactError(f"{paths[name].name} no coincide con la metadata")
 
     features = metadata["columns"]["features"]

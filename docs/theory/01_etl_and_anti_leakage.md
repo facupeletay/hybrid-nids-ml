@@ -100,7 +100,7 @@ Con menos de 50 flujos (o menos de tres timestamps), la campaña va **completa a
 | SQL Injection | 21 | Tres minutos |
 | Infiltration | 36 | Seis conexiones |
 
-Son *zero-day* naturales para la capa supervisada. Infiltration no tiene ninguna muestra en Train: el clasificador multiclase no puede predecirla. El recall sobre ellas es anecdótico y siempre se informa con `n`.
+Son *zero-day* naturales para la capa supervisada. Infiltration no tiene ninguna muestra en Train. El recall sobre ellas es anecdótico y siempre se informa con `n`.
 
 ### 6.3 Sesiones en la frontera
 

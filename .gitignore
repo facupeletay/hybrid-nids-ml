@@ -8,6 +8,7 @@ data/
 # Modelos, métricas y figuras generadas
 models/*.pt
 models/*.json
+models/*.txt
 models/*.joblib
 metrics/*.json
 reports/figures/*.png

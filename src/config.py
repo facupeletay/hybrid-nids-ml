@@ -108,12 +108,13 @@ LEAKAGE_COLUMNS = (
     "Unnamed: 0",
 )
 
+# Puerto destino según el dataset (`--drop-dst-port`).
+DESTINATION_PORT_COLUMNS = ("Destination Port", "Dst Port", "dsport")
+
 # No se podan por defecto, pero son propensas a *shortcut learning*: la topología
 # del laboratorio las vuelve casi un proxy de la etiqueta. Requieren ablación.
 SHORTCUT_PRONE_COLUMNS = (
-    "Destination Port",
-    "Dst Port",
-    "dsport",
+    *DESTINATION_PORT_COLUMNS,
     "sttl",
     "dttl",
     "ct_state_ttl",
@@ -179,6 +180,18 @@ def get_scaler_path(dataset: str = DEFAULT_DATASET) -> Path:
 def get_etl_metadata_path(dataset: str = DEFAULT_DATASET) -> Path:
     """Ruta del JSON con la trazabilidad del ETL."""
     return get_processed_dir(dataset) / f"etl_metadata_{dataset}.json"
+
+
+def get_baseline_model_path(
+    dataset: str = DEFAULT_DATASET, tag: str = "", extension: str = "json"
+) -> Path:
+    """Ruta del modelo supervisado (`json` de XGBoost o `txt` de LightGBM)."""
+    return MODELS_DIR / f"xgb_baseline_{validate_dataset(dataset)}{tag}.{extension}"
+
+
+def get_baseline_report_path(dataset: str = DEFAULT_DATASET, tag: str = "") -> Path:
+    """Ruta del reporte de la capa supervisada."""
+    return METRICS_DIR / f"xgb_baseline_{validate_dataset(dataset)}{tag}.json"
 
 
 def ensure_directories() -> None:

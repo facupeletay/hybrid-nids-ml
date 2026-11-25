@@ -75,9 +75,10 @@ El embargo es **por conversación** y no por ventana horaria: con resolución de
 
 ### 6.1 Supervisado
 
-- Binario y multiclase sobre familias canónicas, con pesos por clase.
+- Binario (`is_attack`), con `scale_pos_weight` calculado en Train. El recall se desglosa por familia y por etiqueta.
 - *Early stopping* por PR-AUC en Val.
-- Score: `P(ataque)`, o `1 − P(BENIGN)` en multiclase.
+- Score: `P(ataque)` en `float64`.
+- Se audita con y sin gemelos, y con y sin puerto destino: [Capa supervisada](theory/02_supervised_soc_baseline.md).
 
 ### 6.2 Autoencoder
 
